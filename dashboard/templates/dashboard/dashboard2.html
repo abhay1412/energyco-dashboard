@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EnergyCo Operations Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 320px; max-height: 40vh; }
+        @media (min-width: 768px) { .chart-container { height: 400px; } }
+        .nav-link { transition: background-color 0.3s, color 0.3s; }
+        .nav-link.active { background-color: #4f46e5; color: white; }
+        .modal-backdrop { transition: opacity 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease; }
+        .admin-only { display: none; }
+        .assignment-field, .password-field { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+
+    <div id="app" class="min-h-screen">
+        <header class="bg-white shadow-sm sticky top-0 z-20">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-slate-900">EnergyCo Operations</h1>
+                <div class="flex items-center space-x-4">
+                    <nav class="hidden sm:flex items-center space-x-2 bg-slate-100 p-1 rounded-lg">
+                        <button data-view="dashboard" class="nav-link px-4 py-2 text-sm font-semibold text-slate-600 rounded-md">Dashboard</button>
+                        <button data-view="management" class="nav-link px-4 py-2 text-sm font-semibold text-slate-600 rounded-md admin-only">Management</button>
+                        <button data-view="audit" class="nav-link px-4 py-2 text-sm font-semibold text-slate-600 rounded-md admin-only">Audit</button>
+                    </nav>
+                    <form id="logout-form" method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg text-sm">Logout</button>
+                    </form>
+                </div>
+            </div>
+        </header>
+
+        <main id="main-content" class="p-4 sm:p-6 lg:p-8">
+            <!-- Dashboard View -->
+            <div id="dashboard-view" class="view-content">
+                <!-- KPIs -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-white p-6 rounded-xl shadow"><h3 class="text-sm font-medium text-slate-500">Total Users</h3><p id="kpi-total-users" class="text-3xl font-bold text-slate-900 mt-2">0</p></div>
+                    <div class="bg-white p-6 rounded-xl shadow"><h3 class="text-sm font-medium text-slate-500">Visible Stations</h3><p id="kpi-total-stations" class="text-3xl font-bold text-slate-900 mt-2">0</p></div>
+                    <div class="bg-white p-6 rounded-xl shadow"><h3 class="text-sm font-medium text-slate-500">Avg. Output (kW)</h3><p id="kpi-avg-output" class="text-3xl font-bold text-slate-900 mt-2">0</p></div>
+                    <div class="bg-white p-6 rounded-xl shadow"><h3 class="text-sm font-medium text-slate-500">Avg. Efficiency</h3><p id="kpi-avg-efficiency" class="text-3xl font-bold text-slate-900 mt-2">0%</p></div>
+                </div>
+                <!-- Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-white p-6 rounded-xl shadow"><h3 class="text-lg font-semibold text-slate-800 mb-4">Country Performance (Avg. Output)</h3><div class="chart-container"><canvas id="country-performance-chart"></canvas></div></div>
+                    <div class="bg-white p-6 rounded-xl shadow"><div class="flex justify-between items-center mb-4"><h3 class="text-lg font-semibold text-slate-800">Station Metrics Over Time</h3><select id="station-selector" class="block w-full max-w-xs p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"></select></div><div class="chart-container"><canvas id="station-metrics-chart"></canvas></div></div>
+                </div>
+            </div>
+
+            <!-- Management View -->
+            <div id="management-view" class="view-content hidden">
+                <div class="bg-white p-6 rounded-xl shadow">
+                    <div class="flex justify-between items-center mb-4"><h3 class="text-lg font-semibold text-slate-800">Users</h3><button id="add-user-btn" class="admin-only bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Add User</button></div>
+                    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-200"><thead class="bg-slate-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">ID</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Email</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Role</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider admin-only">Actions</th></tr></thead><tbody id="users-table-body" class="bg-white divide-y divide-slate-200"></tbody></table></div>
+                </div>
+            </div>
+
+            <!-- Audit View -->
+            <div id="audit-view" class="view-content hidden">
+                <div class="bg-white p-6 rounded-xl shadow"><div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-200"><thead class="bg-slate-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Timestamp</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">User</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Action</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Target</th><th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Details</th></tr></thead><tbody id="audit-table-body" class="bg-white divide-y divide-slate-200"></tbody></table></div></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- User Edit/Create Modal -->
+    <div id="user-modal" class="modal-backdrop fixed inset-0 bg-black bg-opacity-50 z-30 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="modal-content bg-white rounded-lg shadow-xl p-8 w-full max-w-md transform scale-95"><h2 id="modal-title" class="text-2xl font-bold mb-6">Add User</h2>
+            <form id="user-form">
+                <input type="hidden" id="user-id">
+                <div class="space-y-4">
+                    <!-- FIX: Added Name field to the form -->
+                    <div><label for="name" class="block text-sm font-medium text-slate-700">Name</label><input type="text" id="name" class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm" required></div>
+                    <div><label for="email" class="block text-sm font-medium text-slate-700">Email (must be unique)</label><input type="email" id="email" class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm" required></div>
+                    <div id="password-field" class="password-field"><label for="password" class="block text-sm font-medium text-slate-700">Password</label><input type="password" id="password" class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm"></div>
+                    <div><label for="role" class="block text-sm font-medium text-slate-700">Role</label><select id="role" class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm"><option>Viewer</option><option>Station Manager</option><option>Country Lead</option><option>Admin</option></select></div>
+                    <div><label for="active" class="block text-sm font-medium text-slate-700">Status</label><select id="active" class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+                    <div id="country-assignment" class="assignment-field"><label for="country-select" class="block text-sm font-medium text-slate-700">Assign to Country</label><select id="country-select" class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm"></select></div>
+                    <div id="station-assignment" class="assignment-field"><label for="station-select" class="block text-sm font-medium text-slate-700">Assign to Station</label><select id="station-select" class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md shadow-sm"></select></div>
+                </div>
+                <div class="flex justify-end space-x-4 mt-8"><button type="button" id="cancel-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg">Cancel</button><button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Save</button></div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Custom Alert/Confirm Modal -->
+    <div id="alert-modal" class="modal-backdrop fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="modal-content bg-white rounded-lg shadow-xl p-8 w-full max-w-sm transform scale-95">
+            <h3 id="alert-title" class="text-lg font-bold text-slate-800">Confirmation</h3>
+            <p id="alert-message" class="text-slate-600 mt-2 mb-6">Are you sure?</p>
+            <div id="alert-buttons" class="flex justify-end space-x-4">
+                <button id="alert-cancel" class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
+                <button id="alert-confirm" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    
+    const IS_ADMIN = "{{ user_is_admin|yesno:'true,false' }}" === 'true';
+    const API_BASE_URL = '/api/';
+    const appState = { charts: {}, hierarchy: {} };
+
+    const getCookie = (name) => {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            for (const cookie of document.cookie.split(';')) {
+                const [key, value] = cookie.trim().split('=');
+                if (key === name) { cookieValue = decodeURIComponent(value); break; }
+            }
+        }
+        return cookieValue;
+    };
+    
+    const apiRequest = async (endpoint, method = 'GET', body = null) => {
+        const headers = { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') };
+        const config = { method, headers };
+        if (body) config.body = JSON.stringify(body);
+        
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                console.error(`API Error on ${method} ${endpoint}:`, errorData);
+                const errorMessage = Object.values(errorData).flat().join(' ');
+                showAlert(`Error: ${errorMessage || 'An unknown error occurred.'}`, 'Error', false);
+                return null;
+            }
+            if (response.status === 204) return true;
+            return await response.json();
+        } catch (error) {
+            console.error(`Network or other error on ${method} ${endpoint}:`, error);
+            showAlert('A network error occurred. Please try again.', 'Error', false);
+            return null;
+        }
+    };
+
+    const alertModal = document.getElementById('alert-modal');
+    const alertTitle = document.getElementById('alert-title');
+    const alertMessage = document.getElementById('alert-message');
+    const alertCancel = document.getElementById('alert-cancel');
+    const alertConfirm = document.getElementById('alert-confirm');
+    
+    const showAlert = (message, title = 'Info', showCancel = false) => {
+        return new Promise(resolve => {
+            alertTitle.textContent = title;
+            alertMessage.textContent = message;
+            alertCancel.style.display = showCancel ? 'block' : 'none';
+            alertConfirm.textContent = showCancel ? 'Confirm' : 'OK';
+            
+            alertModal.classList.remove('hidden');
+            setTimeout(() => {
+                alertModal.classList.remove('opacity-0');
+                alertModal.querySelector('.modal-content').classList.remove('scale-95');
+            }, 10);
+
+            alertConfirm.onclick = () => { closeAlert(); resolve(true); };
+            alertCancel.onclick = () => { closeAlert(); resolve(false); };
+        });
+    };
+    
+    const closeAlert = () => {
+        alertModal.classList.add('opacity-0');
+        alertModal.querySelector('.modal-content').classList.add('scale-95');
+        setTimeout(() => alertModal.classList.add('hidden'), 300);
+    };
+
+
+    const switchView = (viewName) => {
+        document.querySelectorAll('.view-content').forEach(v => v.classList.add('hidden'));
+        document.getElementById(`${viewName}-view`).classList.remove('hidden');
+        document.querySelectorAll('.nav-link').forEach(l => l.classList.toggle('active', l.dataset.view === viewName));
+        
+        if (viewName === 'audit' && IS_ADMIN) fetchAndRenderAuditLog();
+    };
+
+    const initNav = () => {
+        document.querySelectorAll('.nav-link').forEach(link => link.addEventListener('click', () => switchView(link.dataset.view)));
+        switchView('dashboard');
+    };
+
+    const updateAllData = async () => {
+        const [users, stations, metrics, countries] = await Promise.all([
+            apiRequest('users/'), apiRequest('stations/'), apiRequest('metrics/'), apiRequest('countries/')
+        ]);
+        
+        if (!users || !stations || !metrics || !countries) return;
+
+        appState.hierarchy = { users, stations, countries };
+
+        document.getElementById('kpi-total-users').textContent = users.length;
+        document.getElementById('kpi-total-stations').textContent = stations.length;
+        const totalOutput = metrics.reduce((s, m) => s + m.output, 0);
+        document.getElementById('kpi-avg-output').textContent = (metrics.length > 0 ? totalOutput / metrics.length : 0).toFixed(2);
+        const totalEfficiency = metrics.reduce((s, m) => s + m.efficiency, 0);
+        document.getElementById('kpi-avg-efficiency').textContent = `${(metrics.length > 0 ? totalEfficiency / metrics.length : 0).toFixed(2)}%`;
+
+        renderCountryPerformanceChart(countries, stations, metrics);
+        populateStationSelector(stations);
+        if (IS_ADMIN) renderUsersTable(users);
+    };
+    
+    const renderChart = (ctx, type, data, options) => {
+        const chartId = ctx.canvas.id;
+        if(appState.charts[chartId]) appState.charts[chartId].destroy();
+        appState.charts[chartId] = new Chart(ctx, { type, data, options });
+    };
+
+    const renderCountryPerformanceChart = (countries, stations, metrics) => {
+        const countryData = {};
+        countries.forEach(c => { countryData[c.id] = { name: c.name, totalOutput: 0, count: 0 }; });
+        metrics.forEach(m => {
+            const station = stations.find(s => s.id === m.station);
+            if (station && countryData[station.country]) {
+                countryData[station.country].totalOutput += m.output;
+                countryData[station.country].count++;
+            }
+        });
+        const labels = Object.values(countryData).map(c => c.name);
+        const chartData = Object.values(countryData).map(c => c.count > 0 ? (c.totalOutput / c.count) : 0);
+        const ctx = document.getElementById('country-performance-chart').getContext('2d');
+        renderChart(ctx, 'bar', { labels, datasets: [{ label: 'Average Output (kW)', data: chartData, backgroundColor: 'rgba(79, 70, 229, 0.8)' }] }, { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } });
+    };
+
+    const renderStationMetricsChart = async (stationId) => {
+        if (!stationId) return;
+        const metrics = await apiRequest(`metrics/?station=${stationId}`);
+        if (!metrics) return;
+        
+        const sortedMetrics = metrics.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const labels = sortedMetrics.map(m => new Date(m.timestamp).toLocaleTimeString());
+        const ctx = document.getElementById('station-metrics-chart').getContext('2d');
+        const datasets = [
+            { label: 'Output (kW)', data: sortedMetrics.map(m => m.output), borderColor: 'rgb(79, 70, 229)', tension: 0.1 },
+            { label: 'Temperature (°C)', data: sortedMetrics.map(m => m.temperature), borderColor: 'rgb(220, 38, 38)', tension: 0.1 },
+            { label: 'Efficiency (%)', data: sortedMetrics.map(m => m.efficiency), borderColor: 'rgb(5, 150, 105)', tension: 0.1 }
+        ];
+        renderChart(ctx, 'line', { labels, datasets }, { responsive: true, maintainAspectRatio: false });
+    };
+
+    const populateStationSelector = (stations) => {
+        const selector = document.getElementById('station-selector');
+        selector.innerHTML = stations.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        selector.addEventListener('change', (e) => renderStationMetricsChart(e.target.value));
+        if (stations.length > 0) renderStationMetricsChart(stations[0].id);
+    };
+
+    const renderUsersTable = (users) => {
+        const tableBody = document.getElementById('users-table-body');
+        tableBody.innerHTML = users.map(user => `
+            <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${user.user}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${user.name}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${user.email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${user.role}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${user.active ? 'Active' : 'Inactive'}</span></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2 admin-only">
+                    <button class="text-indigo-600 hover:text-indigo-900 edit-user-btn" data-id="${user.user}">Edit</button>
+                    <button class="text-red-600 hover:text-red-900 delete-user-btn" data-id="${user.user}">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+    };
+    
+    const fetchAndRenderAuditLog = async () => {
+        const logs = await apiRequest('auditlog/');
+        if (!logs) return;
+        const tableBody = document.getElementById('audit-table-body');
+        tableBody.innerHTML = logs.map(log => `
+            <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${new Date(log.timestamp).toLocaleString()}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${log.user_email}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${log.action}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${log.target}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${log.details}</td>
+            </tr>
+        `).join('');
+    };
+
+    const userModal = document.getElementById('user-modal');
+    const userForm = document.getElementById('user-form');
+    const openUserModal = () => {
+        userModal.classList.remove('hidden');
+        setTimeout(() => {
+            userModal.classList.remove('opacity-0');
+            userModal.querySelector('.modal-content').classList.remove('scale-95');
+        }, 10);
+    };
+    const closeUserModal = () => {
+        userModal.classList.add('opacity-0');
+        userModal.querySelector('.modal-content').classList.add('scale-95');
+        setTimeout(() => userModal.classList.add('hidden'), 300);
+    };
+    
+    const populateSelect = (selectId, items, placeholder) => {
+        const select = document.getElementById(selectId);
+        select.innerHTML = `<option value="">${placeholder}</option>`;
+        items.forEach(item => select.innerHTML += `<option value="${item.id}">${item.name}</option>`);
+    };
+
+    const toggleAssignmentFields = () => {
+        const role = document.getElementById('role').value;
+        document.getElementById('country-assignment').style.display = (role === 'Country Lead' || role === 'Viewer') ? 'block' : 'none';
+        document.getElementById('station-assignment').style.display = (role === 'Station Manager' || role === 'Viewer') ? 'block' : 'none';
+        const isNewUser = !document.getElementById('user-id').value;
+        document.getElementById('password-field').style.display = isNewUser ? 'block' : 'none';
+        document.getElementById('password').required = isNewUser;
+    };
+
+    const setupModal = async () => {
+        populateSelect('country-select', appState.hierarchy.countries, 'Select a country...');
+        populateSelect('station-select', appState.hierarchy.stations, 'Select a station...');
+        document.getElementById('add-user-btn').addEventListener('click', () => { userForm.reset(); document.getElementById('user-id').value = ''; document.getElementById('modal-title').textContent = 'Add New User'; toggleAssignmentFields(); openUserModal(); });
+        document.getElementById('cancel-btn').addEventListener('click', closeUserModal);
+        userModal.addEventListener('click', e => { if (e.target === userModal) closeUserModal(); });
+        document.getElementById('role').addEventListener('change', toggleAssignmentFields);
+    };
+
+    const handleEditUser = async (e) => {
+        const userId = e.target.dataset.id;
+        const user = appState.hierarchy.users.find(u => u.user == userId);
+        if (user) {
+            document.getElementById('modal-title').textContent = 'Edit User';
+            document.getElementById('user-id').value = user.user;
+            // FIX: Populate the name field when editing
+            document.getElementById('name').value = user.name;
+            document.getElementById('email').value = user.email;
+            document.getElementById('role').value = user.role;
+            document.getElementById('active').value = user.active.toString();
+            document.getElementById('country-select').value = user.country || '';
+            document.getElementById('station-select').value = user.station || '';
+            toggleAssignmentFields();
+            openUserModal();
+        }
+    };
+
+    userForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('user-id').value;
+        const url = id ? `users/${id}/` : 'users/';
+        const method = id ? 'PUT' : 'POST';
+        // FIX: Add the 'name' field to the request body
+        const body = {
+            name: document.getElementById('name').value,
+            email: document.getElementById('email').value,
+            active: document.getElementById('active').value === 'true',
+            role: document.getElementById('role').value,
+            country: document.getElementById('country-select').value || null,
+            station: document.getElementById('station-select').value || null,
+        };
+        if (!id) { body.password = document.getElementById('password').value; }
+        
+        const result = await apiRequest(url, method, body);
+        if (result) {
+            closeUserModal();
+            showAlert(`User ${id ? 'updated' : 'created'} successfully.`, 'Success');
+            updateAllData();
+        }
+    });
+    
+    document.getElementById('users-table-body').addEventListener('click', (e) => {
+        if (e.target.classList.contains('edit-user-btn')) handleEditUser(e);
+        if (e.target.classList.contains('delete-user-btn')) {
+            const userId = e.target.dataset.id;
+            showAlert(`Are you sure you want to delete user ${userId}?`, 'Confirm Deletion', true)
+                .then(async (confirmed) => {
+                    if (confirmed) {
+                        const result = await apiRequest(`users/${userId}/`, 'DELETE');
+                        if (result) {
+                            showAlert('User deleted successfully.', 'Success');
+                            updateAllData();
+                        }
+                    }
+                });
+        }
+    });
+
+    const init = async () => {
+        if (IS_ADMIN) {
+            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'revert');
+        }
+        initNav();
+        await updateAllData();
+        if (IS_ADMIN) {
+            await setupModal();
+        }
+    };
+
+    init();
+});
+</script>
+</body>
+</html>
